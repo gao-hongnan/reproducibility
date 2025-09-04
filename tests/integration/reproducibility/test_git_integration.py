@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from reproducibility.reproducibility.git import GitInfo, GitRepository
+from reproducibility.git import run
 
 
 def _is_git_installed() -> bool:
@@ -69,18 +69,25 @@ class TestIntegration:
         reason="Git not installed",
     )
     def test_real_git_repository_clean(self, temp_git_repo: Path) -> None:
-        repo = GitRepository(temp_git_repo)
+        commit_result = run("rev-parse", "HEAD", cwd=temp_git_repo)
+        assert commit_result.success
+        assert commit_result.stdout
+        assert len(commit_result.stdout) == 40
 
-        assert repo.commit is not None
-        assert len(repo.commit) == 40
-        assert repo.short_commit is not None
-        assert len(repo.short_commit) == 7
-        assert repo.branch in ["main", "master"]
-        assert repo.is_dirty is False
+        short_commit_result = run("rev-parse", "--short=7", "HEAD", cwd=temp_git_repo)
+        assert short_commit_result.success
+        assert short_commit_result.stdout
+        assert len(short_commit_result.stdout) == 7
 
-        info = repo.info
-        assert isinstance(info, GitInfo)
-        assert info.is_dirty is False
+        branch_result = run("rev-parse", "--abbrev-ref", "HEAD", cwd=temp_git_repo)
+        assert branch_result.success
+        assert branch_result.stdout in ["main", "master"]
+
+        status_result = run("status", "--porcelain", cwd=temp_git_repo)
+        assert status_result.success
+        assert status_result.stdout == ""
+        is_dirty = bool(status_result.stdout)
+        assert is_dirty is False
 
     @pytest.mark.skipif(
         not _is_git_installed(),
@@ -90,12 +97,11 @@ class TestIntegration:
         dirty_file = temp_git_repo / "dirty.txt"
         dirty_file.write_text("uncommitted changes")
 
-        repo = GitRepository(temp_git_repo)
-
-        assert repo.is_dirty is True
-
-        info = repo.info
-        assert info.is_dirty is True
+        status_result = run("status", "--porcelain", cwd=temp_git_repo)
+        assert status_result.success
+        assert status_result.stdout
+        is_dirty = bool(status_result.stdout)
+        assert is_dirty is True
 
     @pytest.mark.skipif(
         not _is_git_installed(),
@@ -106,33 +112,56 @@ class TestIntegration:
         staged_file.write_text("staged content")
         subprocess.run(["git", "add", "staged.txt"], cwd=temp_git_repo, check=True)
 
-        repo = GitRepository(temp_git_repo)
+        status_result = run("status", "--porcelain", cwd=temp_git_repo)
+        assert status_result.success
+        assert status_result.stdout
+        is_dirty = bool(status_result.stdout)
+        assert is_dirty is True
 
-        assert repo.is_dirty is True
+    @pytest.mark.skipif(
+        not _is_git_installed(),
+        reason="Git not installed",
+    )
+    def test_run_timeout_handling(self, temp_git_repo: Path) -> None:
+        for i in range(10):
+            test_file = temp_git_repo / f"file_{i}.txt"
+            test_file.write_text(f"content {i}")
+            subprocess.run(["git", "add", "."], cwd=temp_git_repo, check=True)
+            subprocess.run(
+                ["git", "commit", "-m", f"Commit {i}"],
+                cwd=temp_git_repo,
+                check=True,
+            )
+
+        result = run("log", "--oneline", cwd=temp_git_repo, timeout=5)
+        assert result.success
+        assert result.stdout
 
     def test_non_git_directory(self, tmp_path: Path) -> None:
-        repo = GitRepository(tmp_path)
+        commit_result = run("rev-parse", "HEAD", cwd=tmp_path)
+        assert not commit_result.success
+        assert commit_result.returncode != 0
 
-        assert repo.commit is None
-        assert repo.short_commit is None
-        assert repo.branch is None
-        assert repo.is_dirty is False
+        branch_result = run("rev-parse", "--abbrev-ref", "HEAD", cwd=tmp_path)
+        assert not branch_result.success
 
-        info = repo.info
-        assert info.commit is None
-        assert info.branch is None
-        assert info.is_dirty is False
+        status_result = run("status", "--porcelain", cwd=tmp_path)
+        assert not status_result.success
 
     def test_nonexistent_directory(self) -> None:
-        repo = GitRepository(Path("/this/does/not/exist"))
+        nonexistent = Path("/this/does/not/exist")
 
-        assert repo.commit is None
-        assert repo.short_commit is None
-        assert repo.branch is None
-        assert repo.is_dirty is False
+        try:
+            commit_result = run("rev-parse", "HEAD", cwd=nonexistent)
+            assert not commit_result.success
+        except FileNotFoundError:
+            pass
 
-        info = repo.info
-        assert all(value in [None, False] for value in info.model_dump().values())
+        try:
+            status_result = run("status", "--porcelain", cwd=nonexistent)
+            assert not status_result.success
+        except FileNotFoundError:
+            pass
 
 
 class TestCleanup:
@@ -204,3 +233,25 @@ class TestCleanup:
         total_size = sum(f.stat().st_size for f in repo_path.rglob("*") if f.is_file())
 
         assert total_size < 1_000_000, f"Temp repo too large: {total_size} bytes"
+
+
+class TestRunFunction:
+    @pytest.mark.skipif(
+        not _is_git_installed(),
+        reason="Git not installed",
+    )
+    def test_run_with_real_git_version(self) -> None:
+        result = run("--version")
+        assert result.success
+        assert "git version" in result.stdout
+        assert result.stderr == ""
+
+    @pytest.mark.skipif(
+        not _is_git_installed(),
+        reason="Git not installed",
+    )
+    def test_run_with_invalid_command(self) -> None:
+        result = run("invalid-command-that-does-not-exist")
+        assert not result.success
+        assert result.returncode != 0
+        assert "invalid-command-that-does-not-exist" in result.stderr or result.stderr

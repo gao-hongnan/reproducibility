@@ -1,210 +1,233 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Iterator
+from subprocess import CompletedProcess
+from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
 
-from reproducibility.reproducibility.git import GitInfo, GitRepository
+from reproducibility.git import GitResult, run
 
 
-class TestGitRepository:
+class TestGitResult:
+    def test_success_true_when_returncode_zero(self) -> None:
+        result = GitResult(stdout="output", stderr="", returncode=0)
+        assert result.success is True
+
+    def test_success_false_when_returncode_nonzero(self) -> None:
+        result = GitResult(stdout="", stderr="error", returncode=1)
+        assert result.success is False
+
+    def test_default_values(self) -> None:
+        result = GitResult()
+        assert result.stdout == ""
+        assert result.stderr == ""
+        assert result.returncode == 0
+        assert result.success is True
+
+    def test_with_values(self) -> None:
+        result = GitResult(stdout="commit abc123", stderr="warning: something", returncode=0)
+        assert result.stdout == "commit abc123"
+        assert result.stderr == "warning: something"
+        assert result.returncode == 0
+
+
+class TestRun:
     @pytest.fixture
-    def mock_subprocess_run(self) -> Iterator[Mock]:
+    def mock_subprocess_run(self) -> Any:
         with patch("subprocess.run") as mock_run:
             yield mock_run
 
-    @pytest.fixture
-    def git_repo(self) -> GitRepository:
-        return GitRepository(Path("/fake/repo"))
+    def test_run_status_success(self, mock_subprocess_run: Mock) -> None:
+        mock_process = Mock(spec=CompletedProcess)
+        mock_process.stdout = "  test output  \n"
+        mock_process.stderr = ""
+        mock_process.returncode = 0
+        mock_subprocess_run.return_value = mock_process
 
-    def test_run_git_success(self, git_repo: GitRepository, mock_subprocess_run: Mock) -> None:
-        mock_result = Mock()
-        mock_result.stdout = "  test output  \n"
-        mock_result.returncode = 0
-        mock_subprocess_run.return_value = mock_result
+        result = run("status", "--porcelain")
 
-        result = git_repo._run_git(["status"])
+        assert isinstance(result, GitResult)
+        assert result.stdout == "test output"
+        assert result.stderr == ""
+        assert result.returncode == 0
+        assert result.success is True
 
-        assert result == "test output"
         mock_subprocess_run.assert_called_once_with(
-            ["git", "status"],
+            ["git", "status", "--porcelain"],
+            cwd=None,
+            timeout=30,
             capture_output=True,
             text=True,
-            cwd=Path("/fake/repo"),
-            check=True,
         )
 
-    def test_run_git_subprocess_error(self, git_repo: GitRepository, mock_subprocess_run: Mock) -> None:
-        import subprocess
+    def test_run_with_cwd(self, mock_subprocess_run: Mock) -> None:
+        mock_process = Mock(spec=CompletedProcess)
+        mock_process.stdout = "abc123def\n"
+        mock_process.stderr = ""
+        mock_process.returncode = 0
+        mock_subprocess_run.return_value = mock_process
 
-        mock_subprocess_run.side_effect = subprocess.CalledProcessError(1, "git")
+        test_path = Path("/test/repo")
+        result = run("rev-parse", "HEAD", cwd=test_path)
 
-        result = git_repo._run_git(["status"])
-
-        assert result is None
-
-    def test_run_git_file_not_found(self, git_repo: GitRepository, mock_subprocess_run: Mock) -> None:
-        mock_subprocess_run.side_effect = FileNotFoundError()
-
-        result = git_repo._run_git(["status"])
-
-        assert result is None
-
-    def test_commit_property(self, git_repo: GitRepository, mock_subprocess_run: Mock) -> None:
-        mock_result = Mock()
-        mock_result.stdout = "abc123def456789\n"
-        mock_result.returncode = 0
-        mock_subprocess_run.return_value = mock_result
-
-        commit = git_repo.commit
-
-        assert commit == "abc123def456789"
+        assert result.stdout == "abc123def"
         mock_subprocess_run.assert_called_with(
             ["git", "rev-parse", "HEAD"],
+            cwd=test_path,
+            timeout=30,
             capture_output=True,
             text=True,
-            cwd=Path("/fake/repo"),
-            check=True,
         )
 
-    def test_short_commit_property(self, git_repo: GitRepository, mock_subprocess_run: Mock) -> None:
-        mock_result = Mock()
-        mock_result.stdout = "abc123d\n"
-        mock_result.returncode = 0
-        mock_subprocess_run.return_value = mock_result
+    def test_run_with_custom_timeout(self, mock_subprocess_run: Mock) -> None:
+        mock_process = Mock(spec=CompletedProcess)
+        mock_process.stdout = "output"
+        mock_process.stderr = ""
+        mock_process.returncode = 0
+        mock_subprocess_run.return_value = mock_process
 
-        short_commit = git_repo.short_commit
+        result = run("log", "--oneline", timeout=60)
 
-        assert short_commit == "abc123d"
+        assert result.success is True
+        mock_subprocess_run.assert_called_with(
+            ["git", "log", "--oneline"],
+            cwd=None,
+            timeout=60,
+            capture_output=True,
+            text=True,
+        )
+
+    def test_run_with_error(self, mock_subprocess_run: Mock) -> None:
+        mock_process = Mock(spec=CompletedProcess)
+        mock_process.stdout = ""
+        mock_process.stderr = "fatal: not a git repository\n"
+        mock_process.returncode = 128
+        mock_subprocess_run.return_value = mock_process
+
+        result = run("status")
+
+        assert result.stdout == ""
+        assert result.stderr == "fatal: not a git repository"
+        assert result.returncode == 128
+        assert result.success is False
+
+    def test_run_strips_whitespace(self, mock_subprocess_run: Mock) -> None:
+        mock_process = Mock(spec=CompletedProcess)
+        mock_process.stdout = "  \n\toutput with spaces\t\n  "
+        mock_process.stderr = "\n  error message  \n"
+        mock_process.returncode = 0
+        mock_subprocess_run.return_value = mock_process
+
+        result = run("test")
+
+        assert result.stdout == "output with spaces"
+        assert result.stderr == "error message"
+
+    def test_run_handles_empty_output(self, mock_subprocess_run: Mock) -> None:
+        mock_process = Mock(spec=CompletedProcess)
+        mock_process.stdout = None
+        mock_process.stderr = None
+        mock_process.returncode = 0
+        mock_subprocess_run.return_value = mock_process
+
+        result = run("test")
+
+        assert result.stdout == ""
+        assert result.stderr == ""
+        assert result.success is True
+
+    def test_run_with_kwargs(self, mock_subprocess_run: Mock) -> None:
+        mock_process = Mock(spec=CompletedProcess)
+        mock_process.stdout = "output"
+        mock_process.stderr = ""
+        mock_process.returncode = 0
+        mock_subprocess_run.return_value = mock_process
+
+        custom_env = {"GIT_DIR": ".git"}
+        result = run("status", env=custom_env, encoding="utf-8")
+
+        assert result.success is True
+        mock_subprocess_run.assert_called_with(
+            ["git", "status"],
+            cwd=None,
+            timeout=30,
+            capture_output=True,
+            text=True,
+            env=custom_env,
+            encoding="utf-8",
+        )
+
+    def test_run_multiple_args(self, mock_subprocess_run: Mock) -> None:
+        mock_process = Mock(spec=CompletedProcess)
+        mock_process.stdout = "abc123"
+        mock_process.stderr = ""
+        mock_process.returncode = 0
+        mock_subprocess_run.return_value = mock_process
+
+        result = run("rev-parse", "--short=7", "HEAD")
+
+        assert result.stdout == "abc123"
         mock_subprocess_run.assert_called_with(
             ["git", "rev-parse", "--short=7", "HEAD"],
+            cwd=None,
+            timeout=30,
             capture_output=True,
             text=True,
-            cwd=Path("/fake/repo"),
-            check=True,
         )
 
-    def test_branch_property(self, git_repo: GitRepository, mock_subprocess_run: Mock) -> None:
-        mock_result = Mock()
-        mock_result.stdout = "main\n"
-        mock_result.returncode = 0
-        mock_subprocess_run.return_value = mock_result
 
-        branch = git_repo.branch
+class TestGitExamples:
+    @pytest.fixture
+    def mock_subprocess_run(self) -> Any:
+        with patch("subprocess.run") as mock_run:
+            yield mock_run
+
+    def test_get_commit_hash(self, mock_subprocess_run: Mock) -> None:
+        mock_process = Mock(spec=CompletedProcess)
+        mock_process.stdout = "abc123def456789\n"
+        mock_process.stderr = ""
+        mock_process.returncode = 0
+        mock_subprocess_run.return_value = mock_process
+
+        result = run("rev-parse", "HEAD")
+        commit = result.stdout if result.success else None
+
+        assert commit == "abc123def456789"
+
+    def test_get_branch_name(self, mock_subprocess_run: Mock) -> None:
+        mock_process = Mock(spec=CompletedProcess)
+        mock_process.stdout = "main\n"
+        mock_process.stderr = ""
+        mock_process.returncode = 0
+        mock_subprocess_run.return_value = mock_process
+
+        result = run("rev-parse", "--abbrev-ref", "HEAD")
+        branch = result.stdout if result.success else None
 
         assert branch == "main"
-        mock_subprocess_run.assert_called_with(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True,
-            text=True,
-            cwd=Path("/fake/repo"),
-            check=True,
-        )
 
-    def test_is_dirty_clean_repo(self, git_repo: GitRepository, mock_subprocess_run: Mock) -> None:
-        mock_result = Mock()
-        mock_result.stdout = ""
-        mock_result.returncode = 0
-        mock_subprocess_run.return_value = mock_result
+    def test_check_dirty_status(self, mock_subprocess_run: Mock) -> None:
+        mock_process = Mock(spec=CompletedProcess)
+        mock_process.stdout = " M file.txt\n?? new.py\n"
+        mock_process.stderr = ""
+        mock_process.returncode = 0
+        mock_subprocess_run.return_value = mock_process
 
-        is_dirty = git_repo.is_dirty
-
-        assert is_dirty is False
-        mock_subprocess_run.assert_called_with(
-            ["git", "status", "--porcelain"],
-            capture_output=True,
-            text=True,
-            cwd=Path("/fake/repo"),
-            check=True,
-        )
-
-    def test_is_dirty_with_changes(self, git_repo: GitRepository, mock_subprocess_run: Mock) -> None:
-        mock_result = Mock()
-        mock_result.stdout = " M file.txt\n?? newfile.py\n"
-        mock_result.returncode = 0
-        mock_subprocess_run.return_value = mock_result
-
-        is_dirty = git_repo.is_dirty
+        result = run("status", "--porcelain")
+        is_dirty = bool(result.stdout) if result.success else False
 
         assert is_dirty is True
 
-    def test_info_property(self, git_repo: GitRepository, mock_subprocess_run: Mock) -> None:
-        responses: dict[tuple[str, ...], str] = {
-            ("rev-parse", "HEAD"): "abc123def456789",
-            ("rev-parse", "--short=7", "HEAD"): "abc123d",
-            ("rev-parse", "--abbrev-ref", "HEAD"): "feature-branch",
-            ("status", "--porcelain"): " M modified.txt",
-        }
+    def test_check_clean_status(self, mock_subprocess_run: Mock) -> None:
+        mock_process = Mock(spec=CompletedProcess)
+        mock_process.stdout = ""
+        mock_process.stderr = ""
+        mock_process.returncode = 0
+        mock_subprocess_run.return_value = mock_process
 
-        def mock_run(cmd: list[str], **_kwargs: Any) -> Mock:
-            git_args = tuple(cmd[1:])
-            mock_result = Mock()
-            mock_result.stdout = responses.get(git_args, "") + "\n"
-            mock_result.returncode = 0
-            return mock_result
+        result = run("status", "--porcelain")
+        is_dirty = bool(result.stdout) if result.success else False
 
-        mock_subprocess_run.side_effect = mock_run
-
-        info = git_repo.info
-
-        assert isinstance(info, GitInfo)
-        assert info.commit == "abc123def456789"
-        assert info.short_commit == "abc123d"
-        assert info.branch == "feature-branch"
-        assert info.is_dirty is True
-
-    def test_cached_property_behavior(self, git_repo: GitRepository, mock_subprocess_run: Mock) -> None:
-        mock_result = Mock()
-        mock_result.stdout = "main\n"
-        mock_result.returncode = 0
-        mock_subprocess_run.return_value = mock_result
-
-        branch1 = git_repo.branch
-        branch2 = git_repo.branch
-        branch3 = git_repo.branch
-
-        assert branch1 == branch2 == branch3 == "main"
-        assert mock_subprocess_run.call_count == 1
-
-    def test_none_path_uses_current_directory(self, mock_subprocess_run: Mock) -> None:
-        repo = GitRepository(None)
-        mock_result = Mock()
-        mock_result.stdout = "test\n"
-        mock_result.returncode = 0
-        mock_subprocess_run.return_value = mock_result
-
-        result = repo._run_git(["test"])
-
-        assert result == "test"
-        mock_subprocess_run.assert_called_with(
-            ["git", "test"],
-            capture_output=True,
-            text=True,
-            cwd=None,
-            check=True,
-        )
-
-
-class TestGitInfo:
-    def test_default_values(self) -> None:
-        info = GitInfo()
-
-        assert info.commit is None
-        assert info.short_commit is None
-        assert info.branch is None
-        assert info.is_dirty is False
-
-    def test_with_values(self) -> None:
-        info = GitInfo(
-            commit="abc123",
-            short_commit="abc",
-            branch="main",
-            is_dirty=True,
-        )
-
-        assert info.commit == "abc123"
-        assert info.short_commit == "abc"
-        assert info.branch == "main"
-        assert info.is_dirty is True
+        assert is_dirty is False

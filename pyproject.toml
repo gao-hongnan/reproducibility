@@ -19,9 +19,7 @@ classifiers = [
 
 dependencies = [
     "pydantic>=2.11.7",
-    "pydantic-settings>=2.10.1",
-    "rich>=13.0.0",
-    "tenacity>=9.1.2",
+    "psutil>=6.0.0",
 ]
 
 [project.urls]
