@@ -177,6 +177,45 @@ class TestRun:
             text=True,
         )
 
+    def test_run_strip_output_false(self, mock_subprocess_run: Mock) -> None:
+        mock_process = Mock(spec=CompletedProcess)
+        mock_process.stdout = "  output with spaces  \n\t"
+        mock_process.stderr = "\n  error with spaces  \n"
+        mock_process.returncode = 0
+        mock_subprocess_run.return_value = mock_process
+
+        result = run("diff", strip_output=False)
+
+        assert result.stdout == "  output with spaces  \n\t"
+        assert result.stderr == "\n  error with spaces  \n"
+        assert result.success is True
+
+    def test_run_strip_output_false_empty(self, mock_subprocess_run: Mock) -> None:
+        mock_process = Mock(spec=CompletedProcess)
+        mock_process.stdout = None
+        mock_process.stderr = None
+        mock_process.returncode = 0
+        mock_subprocess_run.return_value = mock_process
+
+        result = run("diff", strip_output=False)
+
+        assert result.stdout == ""
+        assert result.stderr == ""
+        assert result.success is True
+
+    def test_run_strip_output_true_default(self, mock_subprocess_run: Mock) -> None:
+        mock_process = Mock(spec=CompletedProcess)
+        mock_process.stdout = "  output  \n"
+        mock_process.stderr = "  error  \n"
+        mock_process.returncode = 0
+        mock_subprocess_run.return_value = mock_process
+
+        # Test default behavior (strip_output=True)
+        result = run("status")
+
+        assert result.stdout == "output"
+        assert result.stderr == "error"
+
 
 class TestGitExamples:
     @pytest.fixture

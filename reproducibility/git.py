@@ -31,7 +31,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 from subprocess import CompletedProcess
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 from pydantic import BaseModel
 
@@ -55,6 +55,7 @@ def run(
     timeout: float = 30,
     capture_output: Literal[True] = True,
     text: Literal[True] = True,
+    strip_output: bool = True,
     **kwargs: Any,
 ) -> GitResult:
     """Run git command and return result.
@@ -67,6 +68,9 @@ def run(
         Working directory for the command
     timeout : float, optional
         Command timeout in seconds, by default 30
+    strip_output : bool, optional
+        Whether to strip whitespace from output, by default True.
+        Set to False to preserve exact git output (useful for diffs).
     **kwargs : Any
         Additional keyword arguments passed to subprocess.run()
         (e.g., env, encoding, errors). Note that overriding
@@ -86,6 +90,9 @@ def run(
     >>> result = run("rev-parse", "HEAD")
     >>> commit = result.stdout if result.success else None
 
+    >>> # Preserve whitespace for diffs
+    >>> result = run("diff", strip_output=False)
+
     >>> # With custom environment
     >>> result = run("status", env={"GIT_DIR": ".git"})
     """
@@ -98,8 +105,9 @@ def run(
         text=text,
         **kwargs,
     )
+    process: Callable[[str], str] = str.strip if strip_output else lambda s: s
     return GitResult(
-        stdout=result.stdout.strip() if result.stdout else "",
-        stderr=result.stderr.strip() if result.stderr else "",
+        stdout=process(result.stdout or ""),
+        stderr=process(result.stderr or ""),
         returncode=result.returncode,
     )
