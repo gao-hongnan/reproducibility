@@ -31,9 +31,13 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 from subprocess import CompletedProcess
-from typing import Any, Callable, Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel
+
+
+def _strip_if_needed(text: str, strip_output: bool) -> str:
+    return text.strip() if strip_output else text
 
 
 class GitResult(BaseModel):
@@ -49,6 +53,7 @@ class GitResult(BaseModel):
         return self.returncode == 0
 
 
+# TODO: add a whitelist = {"READONLY", ...} to whitelist some git commands.
 def run(
     *args: str,
     cwd: Path | None = None,
@@ -105,9 +110,8 @@ def run(
         text=text,
         **kwargs,
     )
-    process: Callable[[str], str] = str.strip if strip_output else lambda s: s
     return GitResult(
-        stdout=process(result.stdout or ""),
-        stderr=process(result.stderr or ""),
+        stdout=_strip_if_needed(result.stdout or "", strip_output),
+        stderr=_strip_if_needed(result.stderr or "", strip_output),
         returncode=result.returncode,
     )
