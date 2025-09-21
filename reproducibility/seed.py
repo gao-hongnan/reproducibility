@@ -5,129 +5,119 @@ import random
 import warnings
 from typing import TYPE_CHECKING
 
-from .models import DeterministicConfig, SeedConfig
 from .system import is_numpy_available, is_torch_available
 
 if TYPE_CHECKING:
     import numpy as np
 
-__all__ = [
-    "seed_all",
-    "seed_worker",
-    "configure_deterministic_mode",
-    "Seeder",
-]
 
+_MIN_SEED_VALUE = np.iinfo(np.uint32).min
+_MAX_SEED_VALUE = np.iinfo(np.uint32).max  # 2**32 - 1
+
+
+def _raise_error_if_seed_is_negative_or_outside_32_bit_unsigned_integer(seed: int) -> None:
+    if not (_MIN_SEED_VALUE <= seed <= _MAX_SEED_VALUE):
+        raise ValueError(f"Seed must be within the range [{_MIN_SEED_VALUE}, {_MAX_SEED_VALUE}], got {seed}")
+
+
+"""
+Global numpy random generator instance.
+This is intentionally global to maintain a single RNG state across the module.
+NumPy's new random API (numpy>=1.17) recommends using explicit Generator objects
+rather than the legacy global random state. We maintain one generator instance
+here that can be accessed and modified by multiple functions in this module.
+"""
 _numpy_rng: np.random.Generator | None = None
-
-
-class Seeder:
-    def __init__(self, config: SeedConfig | None = None) -> None:
-        self.config = config or SeedConfig()
-        self.numpy_available = is_numpy_available()
-        self.torch_available = is_torch_available()
-
-    def seed_all(self) -> int:
-        global _numpy_rng
-        seed = self.config.seed
-
-        os.environ["PYTHONHASHSEED"] = str(seed)
-
-        if self.config.seed_python:
-            random.seed(seed)
-
-        if self.config.seed_numpy and self.numpy_available:
-            import numpy as np
-
-            _numpy_rng = np.random.default_rng(seed)
-
-        if self.config.seed_torch and self.torch_available:
-            import torch
-
-            torch.manual_seed(seed)
-            torch.backends.cudnn.benchmark = False
-
-            if torch.cuda.is_available():
-                torch.cuda.manual_seed_all(seed)
-
-        if self.config.enable_deterministic and self.torch_available:
-            self.configure_deterministic_mode()
-
-        return seed
-
-    @staticmethod
-    def configure_deterministic_mode(
-        config: DeterministicConfig | None = None,
-    ) -> None:
-        config = config or DeterministicConfig()
-
-        if not is_torch_available():
-            warnings.warn("PyTorch not installed, skipping deterministic mode", stacklevel=2)
-            return
-
-        import torch
-
-        torch.use_deterministic_algorithms(
-            config.use_deterministic_algorithms,
-            warn_only=config.warn_only,
-        )
-        torch.backends.cudnn.benchmark = config.cudnn_benchmark
-        torch.backends.cudnn.deterministic = config.cudnn_deterministic
-
-        if hasattr(torch.backends.cuda, "matmul"):
-            if hasattr(torch.backends.cuda.matmul, "allow_tf32"):
-                torch.backends.cuda.matmul.allow_tf32 = config.allow_tf32
-            if hasattr(torch.backends.cuda.matmul, "allow_fp16_reduced_precision_reduction"):
-                torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction = config.allow_fp16_reduction
-
-        os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", config.cublas_workspace_config)
-
-        if config.use_deterministic_algorithms:
-            warnings.warn(
-                "Deterministic mode activated. This may impact performance and increase CUDA memory usage.",
-                stacklevel=2,
-            )
-
-    @staticmethod
-    def seed_worker(worker_id: int) -> None:
-        _ = worker_id  # NOTE: DataLoader provides worker_id but seed is derived from torch.initial_seed()
-        numpy_available = is_numpy_available()
-        torch_available = is_torch_available()
-
-        if not torch_available:
-            warnings.warn("PyTorch not available for worker seeding", stacklevel=2)
-            return
-
-        import torch
-
-        worker_seed = torch.initial_seed() % 2**32
-
-        random.seed(worker_seed)
-
-        if numpy_available:
-            import numpy as np
-
-            global _numpy_rng
-            _numpy_rng = np.random.default_rng(worker_seed)
 
 
 def seed_all(
     seed: int = 42,
-    seed_torch: bool = True,
-    set_torch_deterministic: bool = True,
+    python: bool = True,
+    numpy: bool = False,
+    pytorch: bool = False,
+    deterministic: bool = False,
 ) -> int:
-    config = SeedConfig(
-        seed=seed,
-        seed_torch=seed_torch,
-        enable_deterministic=set_torch_deterministic,
+    global _numpy_rng
+
+    _raise_error_if_seed_is_negative_or_outside_32_bit_unsigned_integer(seed)
+
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+    if python:
+        random.seed(seed)
+
+    if numpy and is_numpy_available():
+        import numpy as np
+
+        _numpy_rng = np.random.default_rng(seed)
+
+    if pytorch and is_torch_available():
+        import torch
+
+        torch.manual_seed(seed)
+        torch.backends.cudnn.benchmark = False
+
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+
+    if deterministic and is_torch_available():
+        configure_deterministic_mode()
+
+    return seed
+
+
+def configure_deterministic_mode(
+    use_deterministic_algorithms: bool = True,
+    warn_only: bool = True,
+    cudnn_benchmark: bool = False,
+    cudnn_deterministic: bool = True,
+    cublas_workspace_config: str = ":4096:8",
+    allow_tf32: bool = False,
+    allow_fp16_reduction: bool = False,
+) -> None:
+    if not is_torch_available():
+        warnings.warn("PyTorch not installed, skipping deterministic mode", stacklevel=2)
+        return
+
+    import torch
+
+    torch.use_deterministic_algorithms(
+        use_deterministic_algorithms,
+        warn_only=warn_only,
     )
-    seeder = Seeder(config)
-    return seeder.seed_all()
+    torch.backends.cudnn.benchmark = cudnn_benchmark
+    torch.backends.cudnn.deterministic = cudnn_deterministic
 
+    if hasattr(torch.backends.cuda, "matmul"):
+        if hasattr(torch.backends.cuda.matmul, "allow_tf32"):
+            torch.backends.cuda.matmul.allow_tf32 = allow_tf32
+        if hasattr(torch.backends.cuda.matmul, "allow_fp16_reduced_precision_reduction"):
+            torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction = allow_fp16_reduction
 
-def configure_deterministic_mode() -> None:
-    Seeder.configure_deterministic_mode()
+    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", cublas_workspace_config)
+
+    if use_deterministic_algorithms:
+        warnings.warn(
+            "Deterministic mode activated. This may impact performance and increase CUDA memory usage.",
+            stacklevel=2,
+        )
 
 
 def seed_worker(worker_id: int) -> None:
-    Seeder.seed_worker(worker_id)
+    _ = worker_id
+
+    if not is_torch_available():
+        warnings.warn("PyTorch not available for worker seeding", stacklevel=2)
+        return
+
+    import torch
+
+    worker_seed = torch.initial_seed() % (_MAX_SEED_VALUE + 1)
+
+    random.seed(worker_seed)
+
+    if is_numpy_available():
+        import numpy as np
+
+        global _numpy_rng
+        _numpy_rng = np.random.default_rng(worker_seed)
