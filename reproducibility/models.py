@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import torch
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -25,7 +26,7 @@ class RNGStateData(BaseModel):
     python_state: Any | None = None
     numpy_state: dict[str, Any] | None = None
     torch_cpu_state: Any | None = None
-    torch_cuda_states: list[Any] | None = None
+    torch_cuda_states: list[torch.ByteTensor] | None = None
     epoch: int | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 

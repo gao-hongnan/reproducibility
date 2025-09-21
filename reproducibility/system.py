@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import os
 import platform
 from typing import Any, Callable
@@ -17,6 +18,14 @@ def fallback(func: Callable[[], Any], default: Any = None) -> Any:
         return default
 
 
+def is_numpy_available() -> bool:
+    return importlib.util.find_spec("numpy") is not None
+
+
+def is_torch_available() -> bool:
+    return importlib.util.find_spec("torch") is not None
+
+
 class MemoryInfo(BaseModel):
     """Memory information."""
 
@@ -26,13 +35,14 @@ class MemoryInfo(BaseModel):
     @classmethod
     def current(cls: type[MemoryInfo]) -> MemoryInfo:
         """Get current memory information."""
+
         try:
             vm = psutil.virtual_memory()
             return cls(
                 total_mb=vm.total // (1024 * 1024),
                 available_mb=vm.available // (1024 * 1024),
             )
-        except (ImportError, AttributeError):
+        except Exception:
             return cls()
 
 

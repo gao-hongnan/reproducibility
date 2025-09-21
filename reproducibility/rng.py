@@ -4,7 +4,7 @@ import pickle
 import random
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from .models import RNGSaveConfig, RNGStateData
 from .system import is_numpy_available, is_torch_available
@@ -52,7 +52,8 @@ class RNGStateManager:
             state_data.torch_cpu_state = torch.get_rng_state()
 
             if torch.cuda.is_available() and torch.cuda.is_initialized():
-                state_data.torch_cuda_states = torch.cuda.get_rng_state_all()
+                cuda_states = torch.cuda.get_rng_state_all()
+                state_data.torch_cuda_states = cast(list[torch.ByteTensor], cuda_states)
 
         return state_data
 
