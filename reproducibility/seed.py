@@ -11,8 +11,8 @@ if TYPE_CHECKING:
     import numpy as np
 
 
-_MIN_SEED_VALUE = np.iinfo(np.uint32).min
-_MAX_SEED_VALUE = np.iinfo(np.uint32).max  # 2**32 - 1
+_MIN_SEED_VALUE = 0  # np.iinfo(np.uint32).min
+_MAX_SEED_VALUE = 2**32 - 1  # np.iinfo(np.uint32).max
 
 
 def _raise_error_if_seed_is_negative_or_outside_32_bit_unsigned_integer(seed: int) -> None:
@@ -71,6 +71,7 @@ def configure_deterministic_mode(
     warn_only: bool = True,
     cudnn_benchmark: bool = False,
     cudnn_deterministic: bool = True,
+    cudnn_enabled: bool = True,
     cublas_workspace_config: str = ":4096:8",
     allow_tf32: bool = False,
     allow_fp16_reduction: bool = False,
@@ -81,12 +82,10 @@ def configure_deterministic_mode(
 
     import torch
 
-    torch.use_deterministic_algorithms(
-        use_deterministic_algorithms,
-        warn_only=warn_only,
-    )
+    torch.use_deterministic_algorithms(use_deterministic_algorithms, warn_only=warn_only)
     torch.backends.cudnn.benchmark = cudnn_benchmark
     torch.backends.cudnn.deterministic = cudnn_deterministic
+    torch.backends.cudnn.enabled = cudnn_enabled
 
     if hasattr(torch.backends.cuda, "matmul"):
         if hasattr(torch.backends.cuda.matmul, "allow_tf32"):
@@ -112,7 +111,7 @@ def seed_worker(worker_id: int) -> None:
 
     import torch
 
-    worker_seed = torch.initial_seed() % (_MAX_SEED_VALUE + 1)
+    worker_seed = torch.initial_seed() % (2**32)
 
     random.seed(worker_seed)
 
