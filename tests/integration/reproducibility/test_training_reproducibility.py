@@ -76,7 +76,7 @@ class TestTrainingReproducibility:
         import torch.optim as optim
         from torch.utils.data import DataLoader
 
-        seed_all(seed=123, pytorch=True, deterministic=True)
+        seed_all(seed=123, seed_torch=True, set_torch_deterministic=True)
 
         model1 = self.create_simple_network()
         dataset1 = self.create_synthetic_dataset()
@@ -86,7 +86,7 @@ class TestTrainingReproducibility:
 
         losses1 = self.train_one_epoch(model1, dataloader1, optimizer1, criterion1)
 
-        seed_all(seed=123, pytorch=True, deterministic=True)
+        seed_all(seed=123, seed_torch=True, set_torch_deterministic=True)
 
         model2 = self.create_simple_network()
         dataset2 = self.create_synthetic_dataset()
@@ -111,7 +111,7 @@ class TestTrainingReproducibility:
 
         num_epochs = 3
 
-        seed_all(seed=456, pytorch=True, deterministic=True)
+        seed_all(seed=456, seed_torch=True, set_torch_deterministic=True)
 
         model1 = self.create_simple_network()
         dataset1 = self.create_synthetic_dataset()
@@ -124,7 +124,7 @@ class TestTrainingReproducibility:
             losses = self.train_one_epoch(model1, dataloader1, optimizer1, criterion1)
             all_losses1.append(losses)
 
-        seed_all(seed=456, pytorch=True, deterministic=True)
+        seed_all(seed=456, seed_torch=True, set_torch_deterministic=True)
 
         model2 = self.create_simple_network()
         dataset2 = self.create_synthetic_dataset()
@@ -150,7 +150,7 @@ class TestTrainingReproducibility:
         import torch
         from torch.utils.data import DataLoader
 
-        seed_all(seed=789, pytorch=True, deterministic=True)
+        seed_all(seed=789, seed_torch=True, set_torch_deterministic=True)
 
         g1 = torch.Generator()
         g1.manual_seed(789)
@@ -169,7 +169,7 @@ class TestTrainingReproducibility:
         for batch_x, batch_y in dataloader1:
             batches1.append((batch_x.clone(), batch_y.clone()))
 
-        seed_all(seed=789, pytorch=True, deterministic=True)
+        seed_all(seed=789, seed_torch=True, set_torch_deterministic=True)
 
         g2 = torch.Generator()
         g2.manual_seed(789)
@@ -196,10 +196,10 @@ class TestTrainingReproducibility:
     def test_model_initialization_reproducibility(self) -> None:
         import torch
 
-        seed_all(seed=999, pytorch=True, deterministic=True)
+        seed_all(seed=999, seed_torch=True, set_torch_deterministic=True)
         model1 = self.create_simple_network()
 
-        seed_all(seed=999, pytorch=True, deterministic=True)
+        seed_all(seed=999, seed_torch=True, set_torch_deterministic=True)
         model2 = self.create_simple_network()
 
         for p1, p2 in zip(model1.parameters(), model2.parameters(), strict=True):
@@ -208,10 +208,10 @@ class TestTrainingReproducibility:
     def test_different_seeds_produce_different_models(self) -> None:
         import torch
 
-        seed_all(seed=111, pytorch=True, deterministic=True)
+        seed_all(seed=111, seed_torch=True, set_torch_deterministic=True)
         model1 = self.create_simple_network()
 
-        seed_all(seed=222, pytorch=True, deterministic=True)
+        seed_all(seed=222, seed_torch=True, set_torch_deterministic=True)
         model2 = self.create_simple_network()
 
         different = False
@@ -232,7 +232,7 @@ class TestTrainingReproducibility:
 
         from reproducibility import get_numpy_rng
 
-        seed_all(seed=555, numpy=True, pytorch=True, deterministic=True)
+        seed_all(seed=555, seed_numpy=True, seed_torch=True, set_torch_deterministic=True)
 
         model1 = self.create_simple_network()
         dataset1 = self.create_synthetic_dataset()
@@ -257,7 +257,7 @@ class TestTrainingReproducibility:
             loss.backward()
             optimizer1.step()
 
-        seed_all(seed=555, numpy=True, pytorch=True, deterministic=True)
+        seed_all(seed=555, seed_numpy=True, seed_torch=True, set_torch_deterministic=True)
 
         model2 = self.create_simple_network()
         dataset2 = self.create_synthetic_dataset()

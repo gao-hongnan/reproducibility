@@ -17,11 +17,11 @@ TORCH_AVAILABLE = is_torch_available()
 
 class TestActualReproducibility:
     def test_python_random_reproducibility(self) -> None:
-        seed_all(seed=42, python=True, numpy=False, pytorch=False)
+        seed_all(seed=42, python=True, seed_numpy=False, seed_torch=False)
         results1 = [random.random() for _ in range(10)]
         results2 = [random.randint(0, 100) for _ in range(10)]
 
-        seed_all(seed=42, python=True, numpy=False, pytorch=False)
+        seed_all(seed=42, python=True, seed_numpy=False, seed_torch=False)
         results1_repeat = [random.random() for _ in range(10)]
         results2_repeat = [random.randint(0, 100) for _ in range(10)]
 
@@ -32,12 +32,12 @@ class TestActualReproducibility:
     def test_numpy_global_reproducibility(self) -> None:
         import numpy as np
 
-        seed_all(seed=123, numpy=True, pytorch=False)
+        seed_all(seed=123, seed_numpy=True, seed_torch=False)
         arr1 = np.random.random((5, 5))  # noqa: NPY002
         arr2 = np.random.randint(0, 100, size=(3, 3))  # noqa: NPY002
         arr3 = np.random.choice([1, 2, 3, 4, 5], size=10)  # noqa: NPY002
 
-        seed_all(seed=123, numpy=True, pytorch=False)
+        seed_all(seed=123, seed_numpy=True, seed_torch=False)
         arr1_repeat = np.random.random((5, 5))  # noqa: NPY002
         arr2_repeat = np.random.randint(0, 100, size=(3, 3))  # noqa: NPY002
         arr3_repeat = np.random.choice([1, 2, 3, 4, 5], size=10)  # noqa: NPY002
@@ -50,7 +50,7 @@ class TestActualReproducibility:
     def test_numpy_generator_reproducibility(self) -> None:
         import numpy as np
 
-        seed_all(seed=456, numpy=True, pytorch=False)
+        seed_all(seed=456, seed_numpy=True, seed_torch=False)
         rng = get_numpy_rng()
         assert rng is not None
 
@@ -58,7 +58,7 @@ class TestActualReproducibility:
         arr2 = rng.integers(0, 100, size=(3, 3))
         arr3 = rng.choice([1, 2, 3, 4, 5], size=10)
 
-        seed_all(seed=456, numpy=True, pytorch=False)
+        seed_all(seed=456, seed_numpy=True, seed_torch=False)
         rng2 = get_numpy_rng()
         assert rng2 is not None
 
@@ -74,7 +74,7 @@ class TestActualReproducibility:
     def test_get_numpy_rng_function(self) -> None:
         import numpy as np
 
-        seed_all(seed=789, numpy=True)
+        seed_all(seed=789, seed_numpy=True)
         rng_after = get_numpy_rng()
 
         assert rng_after is not None
@@ -85,7 +85,7 @@ class TestActualReproducibility:
         assert all(0 <= v <= 1 for v in values)
 
         if NUMPY_AVAILABLE:
-            seed_all(seed=789, numpy=False)
+            seed_all(seed=789, seed_numpy=False)
             rng_unchanged = get_numpy_rng()
             assert rng_unchanged is rng_after
 
@@ -93,13 +93,13 @@ class TestActualReproducibility:
     def test_pytorch_reproducibility(self) -> None:
         import torch
 
-        seed_all(seed=999, pytorch=True, deterministic=True)
+        seed_all(seed=999, seed_torch=True, set_torch_deterministic=True)
 
         tensor1 = torch.randn(3, 3)
         tensor2 = torch.randint(0, 10, (2, 4))
         tensor3 = torch.rand(5)
 
-        seed_all(seed=999, pytorch=True, deterministic=True)
+        seed_all(seed=999, seed_torch=True, set_torch_deterministic=True)
 
         tensor1_repeat = torch.randn(3, 3)
         tensor2_repeat = torch.randint(0, 10, (2, 4))
@@ -116,12 +116,12 @@ class TestActualReproducibility:
         if not torch.cuda.is_available():
             pytest.skip("CUDA not available")
 
-        seed_all(seed=555, pytorch=True, deterministic=True)
+        seed_all(seed=555, seed_torch=True, set_torch_deterministic=True)
 
         cuda_tensor1 = torch.randn(3, 3, device="cuda")
         cuda_tensor2 = torch.randint(0, 10, (2, 4), device="cuda")
 
-        seed_all(seed=555, pytorch=True, deterministic=True)
+        seed_all(seed=555, seed_torch=True, set_torch_deterministic=True)
 
         cuda_tensor1_repeat = torch.randn(3, 3, device="cuda")
         cuda_tensor2_repeat = torch.randint(0, 10, (2, 4), device="cuda")
@@ -134,7 +134,7 @@ class TestActualReproducibility:
         import numpy as np
         import torch
 
-        seed_all(seed=1337, python=True, numpy=True, pytorch=True, deterministic=True)
+        seed_all(seed=1337, python=True, seed_numpy=True, seed_torch=True, set_torch_deterministic=True)
 
         py_random = [random.random() for _ in range(5)]
         np_global = np.random.random((3, 3))  # noqa: NPY002
@@ -145,7 +145,7 @@ class TestActualReproducibility:
 
         torch_tensor = torch.randn(4, 4)
 
-        seed_all(seed=1337, python=True, numpy=True, pytorch=True, deterministic=True)
+        seed_all(seed=1337, python=True, seed_numpy=True, seed_torch=True, set_torch_deterministic=True)
 
         py_random_repeat = [random.random() for _ in range(5)]
         np_global_repeat = np.random.random((3, 3))  # noqa: NPY002
@@ -165,10 +165,10 @@ class TestActualReproducibility:
     def test_different_seeds_produce_different_results(self) -> None:
         import numpy as np
 
-        seed_all(seed=100, numpy=True)
+        seed_all(seed=100, seed_numpy=True)
         arr1 = np.random.random((5, 5))  # noqa: NPY002
 
-        seed_all(seed=200, numpy=True)
+        seed_all(seed=200, seed_numpy=True)
         arr2 = np.random.random((5, 5))  # noqa: NPY002
 
         assert not np.array_equal(arr1, arr2)
@@ -186,7 +186,7 @@ class TestActualReproducibility:
 
     @pytest.mark.skipif(not NUMPY_AVAILABLE, reason="numpy not installed")
     def test_numpy_rng_persistence_across_calls(self) -> None:
-        seed_all(seed=333, numpy=True)
+        seed_all(seed=333, seed_numpy=True)
         rng1 = get_numpy_rng()
         assert rng1 is not None
 
@@ -202,7 +202,7 @@ class TestActualReproducibility:
     def test_global_and_generator_independence(self) -> None:
         import numpy as np
 
-        seed_all(seed=444, numpy=True)
+        seed_all(seed=444, seed_numpy=True)
 
         global_vals = [np.random.random() for _ in range(5)]  # noqa: NPY002
 
@@ -212,6 +212,6 @@ class TestActualReproducibility:
 
         assert global_vals != gen_vals
 
-        seed_all(seed=444, numpy=True)
+        seed_all(seed=444, seed_numpy=True)
         global_vals_repeat = [np.random.random() for _ in range(5)]  # noqa: NPY002
         assert global_vals == global_vals_repeat

@@ -79,9 +79,9 @@ def get_numpy_rng() -> np.random.Generator | None:
 def seed_all(
     seed: int = 42,
     python: bool = True,
-    numpy: bool = True,
-    pytorch: bool = True,
-    deterministic: bool = False,
+    seed_numpy: bool = True,
+    seed_torch: bool = True,
+    set_torch_deterministic: bool = False,
 ) -> int:
     """Seed all relevant random number generators to ensure reproducibility.
 
@@ -97,13 +97,13 @@ def seed_all(
         (valid unsigned 32-bit integer range).
     python : bool, default=True
         Whether to seed Python's built-in random module.
-    numpy : bool, default=True
+    seed_numpy : bool, default=True
         Whether to seed NumPy's random number generators. Seeds both
         the legacy global state and creates a new Generator instance.
-    pytorch : bool, default=True
+    seed_torch : bool, default=True
         Whether to seed PyTorch's random number generators on both
         CPU and CUDA devices. Also disables cudnn.benchmark.
-    deterministic : bool, default=False
+    set_torch_deterministic : bool, default=False
         Whether to configure PyTorch for fully deterministic behavior.
         This may impact performance and increase memory usage.
 
@@ -143,7 +143,7 @@ def seed_all(
     >>> # All random number generators are now seeded with 42
 
     >>> # For fully deterministic PyTorch operations
-    >>> seed = seed_all(42, deterministic=True)
+    >>> seed = seed_all(42, set_torch_deterministic=True)
     """
     global _numpy_rng
 
@@ -154,13 +154,13 @@ def seed_all(
     if python:
         random.seed(seed)
 
-    if numpy and is_numpy_available():
+    if seed_numpy and is_numpy_available():
         import numpy as np
 
         np.random.seed(seed)  # noqa: NPY002
         _numpy_rng = np.random.default_rng(seed)
 
-    if pytorch and is_torch_available():
+    if seed_torch and is_torch_available():
         import torch
 
         torch.manual_seed(seed)
@@ -169,7 +169,7 @@ def seed_all(
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
 
-    if deterministic and is_torch_available():
+    if set_torch_deterministic and is_torch_available():
         configure_deterministic_mode()
 
     return seed

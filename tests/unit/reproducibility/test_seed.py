@@ -25,20 +25,20 @@ class TestModuleImport:
 
 class TestSeedAll:
     def test_seed_all_sets_pythonhashseed(self) -> None:
-        result = seed_all(seed=123, deterministic=False)
+        result = seed_all(seed=123, set_torch_deterministic=False)
         assert os.environ["PYTHONHASHSEED"] == "123"
         assert result == 123
 
     def test_seed_all_python_seeding(self) -> None:
         initial_state = random.getstate()
-        seed_all(seed=456, python=True, deterministic=False)
+        seed_all(seed=456, python=True, set_torch_deterministic=False)
         new_state = random.getstate()
         assert initial_state != new_state
 
     def test_seed_all_skip_python_seeding(self) -> None:
         random.seed()
         initial_state = random.getstate()
-        seed_all(seed=456, python=False, deterministic=False)
+        seed_all(seed=456, python=False, set_torch_deterministic=False)
         new_state = random.getstate()
         assert initial_state == new_state
 
@@ -46,7 +46,7 @@ class TestSeedAll:
     def test_seed_all_numpy_seeding(self) -> None:
         import reproducibility.seed as seed_module
 
-        seed_all(seed=789, numpy=True, deterministic=False)
+        seed_all(seed=789, seed_numpy=True, set_torch_deterministic=False)
         if seed_module._numpy_rng is not None:
             state1 = seed_module._numpy_rng.bit_generator.state
             seed_module._numpy_rng.random()
@@ -57,7 +57,7 @@ class TestSeedAll:
     def test_seed_all_torch_seeding(self) -> None:
         import torch
 
-        seed_all(seed=111, pytorch=True, deterministic=False)
+        seed_all(seed=111, seed_torch=True, set_torch_deterministic=False)
         tensor1 = torch.rand(3)
         tensor2 = torch.rand(3)
         assert not torch.equal(tensor1, tensor2)
@@ -65,7 +65,7 @@ class TestSeedAll:
     @pytest.mark.skipif(not TORCH_AVAILABLE, reason="torch not installed")
     def test_seed_all_deterministic_mode(self) -> None:
         with patch("reproducibility.seed.configure_deterministic_mode") as mock_configure:
-            seed_all(seed=222, deterministic=True)
+            seed_all(seed=222, set_torch_deterministic=True)
             mock_configure.assert_called_once()
 
     @patch("reproducibility.seed.is_numpy_available", return_value=False)
