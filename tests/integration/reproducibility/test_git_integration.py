@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from reproducibility.git import run
+from reproducibility.git import get_commit_sha, run
+from reproducibility.types import UNKNOWN
 
 
 def _is_git_installed() -> bool:
@@ -255,3 +256,45 @@ class TestRunFunction:
         assert not result.success
         assert result.returncode != 0
         assert "invalid-command-that-does-not-exist" in result.stderr or result.stderr
+
+    @pytest.mark.skipif(
+        not _is_git_installed(),
+        reason="Git not installed",
+    )
+    def test_get_commit_sha_short(self, temp_git_repo: Path) -> None:
+        short_sha = get_commit_sha(style="short", cwd=temp_git_repo)
+        assert short_sha != UNKNOWN
+        assert len(short_sha) == 7
+        assert all(c in "0123456789abcdef" for c in short_sha)
+
+    @pytest.mark.skipif(
+        not _is_git_installed(),
+        reason="Git not installed",
+    )
+    def test_get_commit_sha_short_default(self, temp_git_repo: Path) -> None:
+        short_sha = get_commit_sha(cwd=temp_git_repo)
+        assert short_sha != UNKNOWN
+        assert len(short_sha) == 7
+        assert all(c in "0123456789abcdef" for c in short_sha)
+
+    @pytest.mark.skipif(
+        not _is_git_installed(),
+        reason="Git not installed",
+    )
+    def test_get_commit_sha_full(self, temp_git_repo: Path) -> None:
+        full_sha = get_commit_sha(style="full", cwd=temp_git_repo)
+        assert full_sha != UNKNOWN
+        assert len(full_sha) == 40
+        assert all(c in "0123456789abcdef" for c in full_sha)
+
+    @pytest.mark.skipif(
+        not _is_git_installed(),
+        reason="Git not installed",
+    )
+    def test_get_commit_sha_full_and_short_consistency(self, temp_git_repo: Path) -> None:
+        full_sha = get_commit_sha(style="full", cwd=temp_git_repo)
+        short_sha = get_commit_sha(style="short", cwd=temp_git_repo)
+
+        assert full_sha.startswith(short_sha)
+        assert len(short_sha) == 7
+        assert len(full_sha) == 40

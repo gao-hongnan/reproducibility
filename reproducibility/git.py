@@ -31,9 +31,11 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 from subprocess import CompletedProcess
-from typing import Any, Literal
+from typing import Any, Literal, overload
 
 from pydantic import BaseModel
+
+from .types import UNKNOWN, FullSha, ShaStyle, ShortSha
 
 
 def _strip_if_needed(text: str, strip_output: bool) -> str:
@@ -41,15 +43,12 @@ def _strip_if_needed(text: str, strip_output: bool) -> str:
 
 
 class GitResult(BaseModel):
-    """Simple result from git command."""
-
     stdout: str = ""
     stderr: str = ""
     returncode: int = 0
 
     @property
     def success(self) -> bool:
-        """Check if command succeeded."""
         return self.returncode == 0
 
 
@@ -115,3 +114,16 @@ def run(
         stderr=_strip_if_needed(result.stderr or "", strip_output),
         returncode=result.returncode,
     )
+
+
+@overload
+def get_commit_sha(style: Literal["full"], cwd: Path | None = None) -> FullSha: ...
+
+
+@overload
+def get_commit_sha(style: Literal["short"] = ..., cwd: Path | None = None) -> ShortSha: ...
+
+
+def get_commit_sha(style: ShaStyle = "short", cwd: Path | None = None) -> str:
+    result = run("rev-parse", "HEAD", cwd=cwd) if style == "full" else run("rev-parse", "--short", "HEAD", cwd=cwd)
+    return result.stdout if result.success else UNKNOWN

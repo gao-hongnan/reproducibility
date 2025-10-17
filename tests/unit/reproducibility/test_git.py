@@ -7,7 +7,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from reproducibility.git import GitResult, run
+from reproducibility.git import GitResult, get_commit_sha, run
+from reproducibility.types import UNKNOWN
 
 
 class TestGitResult:
@@ -270,3 +271,86 @@ class TestGitExamples:
         is_dirty = bool(result.stdout) if result.success else False
 
         assert is_dirty is False
+
+
+class TestGetCommitSha:
+    @pytest.fixture
+    def mock_subprocess_run(self) -> Any:
+        with patch("subprocess.run") as mock_run:
+            yield mock_run
+
+    def test_get_commit_sha_short_default(self, mock_subprocess_run: Mock) -> None:
+        mock_process = Mock(spec=CompletedProcess)
+        mock_process.stdout = "abc1234\n"
+        mock_process.stderr = ""
+        mock_process.returncode = 0
+        mock_subprocess_run.return_value = mock_process
+
+        result = get_commit_sha()
+
+        assert result == "abc1234"
+        mock_subprocess_run.assert_called_with(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=None,
+            timeout=30,
+            capture_output=True,
+            text=True,
+        )
+
+    def test_get_commit_sha_short_explicit(self, mock_subprocess_run: Mock) -> None:
+        mock_process = Mock(spec=CompletedProcess)
+        mock_process.stdout = "abc1234\n"
+        mock_process.stderr = ""
+        mock_process.returncode = 0
+        mock_subprocess_run.return_value = mock_process
+
+        result = get_commit_sha(style="short")
+
+        assert result == "abc1234"
+        mock_subprocess_run.assert_called_with(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=None,
+            timeout=30,
+            capture_output=True,
+            text=True,
+        )
+
+    def test_get_commit_sha_full(self, mock_subprocess_run: Mock) -> None:
+        mock_process = Mock(spec=CompletedProcess)
+        mock_process.stdout = "abc1234def5678901234567890abcdef1234\n"
+        mock_process.stderr = ""
+        mock_process.returncode = 0
+        mock_subprocess_run.return_value = mock_process
+
+        result = get_commit_sha(style="full")
+
+        assert result == "abc1234def5678901234567890abcdef1234"
+        mock_subprocess_run.assert_called_with(
+            ["git", "rev-parse", "HEAD"],
+            cwd=None,
+            timeout=30,
+            capture_output=True,
+            text=True,
+        )
+
+    def test_get_commit_sha_short_failure(self, mock_subprocess_run: Mock) -> None:
+        mock_process = Mock(spec=CompletedProcess)
+        mock_process.stdout = ""
+        mock_process.stderr = "fatal: not a git repository\n"
+        mock_process.returncode = 128
+        mock_subprocess_run.return_value = mock_process
+
+        result = get_commit_sha()
+
+        assert result == UNKNOWN
+
+    def test_get_commit_sha_full_failure(self, mock_subprocess_run: Mock) -> None:
+        mock_process = Mock(spec=CompletedProcess)
+        mock_process.stdout = ""
+        mock_process.stderr = "fatal: not a git repository\n"
+        mock_process.returncode = 128
+        mock_subprocess_run.return_value = mock_process
+
+        result = get_commit_sha(style="full")
+
+        assert result == UNKNOWN
